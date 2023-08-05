@@ -3,7 +3,7 @@
 using namespace std;
 
 inline double sigmoid(double z) {
-	return (1 / (1 + exp(z)));
+	return (1 / (1 + exp(-z)));
 }
 inline double sigmoid_prime(double z) {
 	return sigmoid(z) * (1 - sigmoid(z));
