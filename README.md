@@ -5,4 +5,4 @@ It has initially been implemented in the book "Neural networks and deep learning
 
 *Work in progress*
 
-<u> underlined
+<ins>underlined</ins>
