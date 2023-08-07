@@ -1,4 +1,3 @@
-// Μπορεί να γίνει βελτίωση στη sigmoid (με void και reference ή με εφαρμογή σε διάνυσμα)
 #include <iostream>
 #include <vector>
 #include <random>
@@ -69,6 +68,12 @@ public:
 	int getNum_Layers() {
 		return num_layers;
 	}
+	void setBiases(vector<vector<double>> b) {
+		biases = b;
+	}
+	void setWeights(vector<vector<vector<double>>> w) {
+		weights = w;
+	}
 };
 
 int main()
@@ -82,7 +87,7 @@ int main()
 		training_data.push_back( { dataset.training_images[i], dataset.training_labels[i] } );
 	}
 
-	Network net = Network({2, 3, 1});
+	Network net = Network({6, 10, 2});
 	/*
 	vector<vector<double>> a; // a is a vector which contains a vector of activations for each layer
 	vector<double> temp;
@@ -118,8 +123,141 @@ int main()
 		}
 		for (vector< pair< vector<unsigned char>, unsigned char > > mini_batch : mini_batches) {
 			// Εδώ μπαίνει συνάρτηση (που στο βιβλίο ονομάζει update_mini_batch) με παραμέτρους mini_batch και eta (η)
+			vector<vector<vector<double>>> dCdw;
+			vector<vector<double>> dCdb;
+			for (int m_b_s = 0; m_b_s < mini_batch_size; m_b_s++) {
+				// Κάνει loop σε κάθε mini batch, για κάθε στοιχείο του και αποθηκεύει ένα άθροισμα με τα errors δ και
+				// τις ποσότητες που αλλάζουν τα βάρη. Στο τέλος, μετά από την εσωτερική for, θα διαιρέσουμε με το
+				// mini_batch_size, ώστε να προκύψει ο μέσος όρος και θα προσαρμόσουμε τα βάρη και τις μεροληψίες.
+
+				vector<vector<double>> activations, zeds;
+				activations.push_back({ 0.3, 0.1, 0.7, 0.0, 0.0, 0.2 });
+
+				// Υπολογίζω τις τιμές a (activation) και z για κάθε layer
+				for (int i = 0; i < net.getNum_Layers() - 1; i++) {
+					vector<double> temp = VecAdd(MatMultVec(net.getWeights()[i], activations[i]), net.getBiases()[i]);
+					zeds.push_back(temp);
+					for (int j = 0; j < temp.size(); j++) {
+						temp[j] = sigmoid(temp[j]);
+					}
+					activations.push_back(temp);
+				}
+
+				// Υπολογίζω το τελευταίο layer των errors, δL
+				vector<vector<double>> delta;
+				vector<double> y = { 0, 1 };
+				delta.push_back(cost_derivative(activations[activations.size() - 1], y));
+
+				// Υπολογίζω τα errors για τα προηγούμενα layers μέχρι και το προτελευταίο	
+				for (int i = net.getNum_Layers() - 2; i > 0; i--) {
+					vector<vector<double>> wTranspose;
+					for (int j = 0; j < net.getSizes()[i]; j++) {
+						vector<double> temp;
+						for (int k = 0; k < net.getSizes()[i + 1]; k++) {
+							temp.push_back(net.getWeights()[i][k][j]);
+						}
+						wTranspose.push_back(temp);
+					}
+					vector<double> sigmPrime;
+					for (int j = 0; j < zeds[i - 1].size(); j++) {
+						sigmPrime.push_back(sigmoid_prime(zeds[i - 1][j]));
+					}
+					delta.push_back(VecKronProd(MatMultVec(wTranspose, delta[i - 1]), sigmPrime));
+				}
+
+				// Υπολογίζω τους πίνακες με τις μερικές παραγώγους της cost function ως προς τα βάρη και τις μεροληψίες
+				if (m_b_s == 0) {
+					dCdb = delta;
+				}
+				else {
+					for (int i = 0; i < dCdb.size(); i++) {
+						for (int j = 0; j < dCdb[i].size(); j++) {
+							dCdb[i][j] += delta[i][j];
+						}
+					}
+				}
+
+				if (m_b_s == 0) {
+					for (int i = 1; i < net.getNum_Layers(); i++) {
+						vector<vector<double>> tempMid;
+						for (int j = 0; j < net.getSizes()[i]; j++) {
+							vector<double> tempIn;
+							for (int k = 0; k < net.getSizes()[i - 1]; k++) {
+								tempIn.push_back(activations[i - 1][k] * delta[net.getNum_Layers() - i - 1][j]);
+							}
+							tempMid.push_back(tempIn);
+						}
+						dCdw.push_back(tempMid);
+					}
+				}
+				else {
+					vector<vector<vector<double>>> tempdC;
+					for (int i = 1; i < net.getNum_Layers(); i++) {
+						vector<vector<double>> tempMid;
+						for (int j = 0; j < net.getSizes()[i]; j++) {
+							vector<double> tempIn;
+							for (int k = 0; k < net.getSizes()[i - 1]; k++) {
+								tempIn.push_back(activations[i - 1][k] * delta[net.getNum_Layers() - i - 1][j]);
+							}
+							tempMid.push_back(tempIn);
+						}
+						tempdC.push_back(tempMid);
+					}
+					for (int i = 0; i < tempdC.size(); i++) {
+						for (int j = 0; j < tempdC[i].size(); j++) {
+							for (int k = 0; k < tempdC[i][j].size(); k++) {
+								dCdw[i][j][k] += tempdC[i][j][k];
+							}
+						}
+					}
+				}
+			}
+			// Εδώ γίνεται η διαίρεση με το mini_batch_size και στη συνέχεια αλλάζουμε τις τιμές των
+			// βαρών και των μεροληψιών
+			for (int i = 0; i < dCdb.size(); i++) {
+				for (int j = 0; j < dCdb[i].size(); j++) {
+					dCdb[i][j] /= 10;
+				}
+			}
+			for (int i = 0; i < dCdw.size(); i++) {
+				for (int j = 0; j < dCdw[i].size(); j++) {
+					for (int k = 0; k < dCdw[i][j].size(); k++) {
+						dCdw[i][j][k] /= 10;
+					}
+				}
+			}
+			vector<vector<double>> b = net.getBiases();
+			for (int i = 0; i < dCdb.size(); i++) {
+				for (int j = 0; j < dCdb[net.getNum_Layers() - i - 2].size(); j++) {
+					b[i][j] -= eta * dCdb[net.getNum_Layers() - i - 2][j];
+				}
+			}
+			net.setBiases(b);
+			dCdb.clear();
+			vector<vector<vector<double>>> w = net.getWeights();
+			for (int i = 0; i < dCdw.size(); i++) {
+				for (int j = 0; j < net.getSizes()[i + 1]; j++) {
+					for (int k = 0; k < net.getSizes()[i]; k++) {
+						w[i][j][k] -= eta * dCdw[i][j][k];
+					}
+				}
+			}
+			net.setWeights(w);
+			dCdw.clear();
 		}
 		cout << "Epoch " << i << " complete." << endl;
+		vector<vector<double>> activations, zeds;
+		vector<double> test_subject = { 0.3, 0.1, 0.7, 0.0, 0.0, 0.2 };
+		activations.push_back(test_subject);
+		for (int i = 0; i < net.getNum_Layers() - 1; i++) {
+			vector<double> temp = VecAdd(MatMultVec(net.getWeights()[i], activations[i]), net.getBiases()[i]);
+			zeds.push_back(temp);
+			for (int j = 0; j < temp.size(); j++) {
+				temp[j] = sigmoid(temp[j]);
+			}
+			activations.push_back(temp);
+		}
+		cout << "1";
 	}
 
 
