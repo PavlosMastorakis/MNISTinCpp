@@ -1,3 +1,4 @@
+// Μπορεί να γίνει βελτίωση στη sigmoid (με void και reference ή με εφαρμογή σε διάνυσμα)
 #include <iostream>
 #include <vector>
 #include <random>
@@ -82,45 +83,25 @@ int main()
 	auto dataset = mnist::read_dataset<vector, vector, uint8_t, uint8_t>();
 	// Κάνει tuple το training_images με το training_labels. Το tuple ονομάζεται training_data.
 	vector< pair< vector<unsigned char>, unsigned char > > training_data;
-	int n = dataset.training_images.size();
+	int n = 8000; //dataset.training_images.size();
 	for (int i = 0; i < n; i++) {
 		training_data.push_back( { dataset.training_images[i], dataset.training_labels[i] } );
 	}
 
-	Network net = Network({6, 10, 2});
-	/*
-	vector<vector<double>> a; // a is a vector which contains a vector of activations for each layer
-	vector<double> temp;
-	for (int i = 0; i < net.getSizes()[0]; i++) {
-		temp.push_back(distribution(generator));
-	}
-	a.push_back(temp); // a for the first layer (input layer)
-
-	// Runs through the n-1 remaining layers, assigning values to them, filtered with the sigmoid function
-	for (int i = 0; i < net.getNum_Layers() - 1; i++) {
-		a.push_back(MatMultVec(net.getWeights()[i], a[i]));
-		for (int j = 0; j < a[i + 1].size(); j++) {
-			a[i + 1][j] = sigmoid(a[i + 1][j] + net.getBiases()[i][j]);
-		}
-	}
-	for (int i = 0; i < a.size(); i++) {
-		for (int j = 0; j < a[i].size(); j++) {
-			cout << a[i][j] << " ";
-		}
-		cout << endl;
-	}*/
+	Network net = Network({784, 30, 10});
 
 	// Epoch training: given an epoch, we want the program to run (epoch) times. So, for loop, epoch times.
-	// The epoch is given at the beggining of the program, along with other the other parameters.
+	// The epoch is given at the beggining of the program, along with other the other hyper-parameters.
 	srand(time(0));
-	int epoch = 2, mini_batch_size = 10;
+	int epoch = 1, mini_batch_size = 10;
 	double eta = 3.0;
-	for (int i = 0; i < epoch; i++) {
+	for (int ep = 0; ep < epoch; ep++) {
 		random_shuffle(training_data.begin(), training_data.end());	
 		vector< vector< pair< vector<unsigned char>, unsigned char > > > mini_batches;
 		for (int k = 0; k < n; k += mini_batch_size) {
 			mini_batches.push_back({ training_data.begin() + k,  training_data.begin() + k + mini_batch_size});
 		}
+		int help = 1;
 		for (vector< pair< vector<unsigned char>, unsigned char > > mini_batch : mini_batches) {
 			// Εδώ μπαίνει συνάρτηση (που στο βιβλίο ονομάζει update_mini_batch) με παραμέτρους mini_batch και eta (η)
 			vector<vector<vector<double>>> dCdw;
@@ -130,8 +111,13 @@ int main()
 				// τις ποσότητες που αλλάζουν τα βάρη. Στο τέλος, μετά από την εσωτερική for, θα διαιρέσουμε με το
 				// mini_batch_size, ώστε να προκύψει ο μέσος όρος και θα προσαρμόσουμε τα βάρη και τις μεροληψίες.
 
+				vector<double> mini_b_to_double;
+				for (int i = 0; i < 784; i++) {
+					mini_b_to_double.push_back(double(mini_batch[m_b_s].first[i]) / 255);
+				}
+
 				vector<vector<double>> activations, zeds;
-				activations.push_back({ 0.3, 0.1, 0.7, 0.0, 0.0, 0.2 });
+				activations.push_back(mini_b_to_double);
 
 				// Υπολογίζω τις τιμές a (activation) και z για κάθε layer
 				for (int i = 0; i < net.getNum_Layers() - 1; i++) {
@@ -145,7 +131,11 @@ int main()
 
 				// Υπολογίζω το τελευταίο layer των errors, δL
 				vector<vector<double>> delta;
-				vector<double> y = { 0, 1 };
+				vector<double> y;
+				for (int i = 0; i < 10; i++) {
+					if (i == mini_batch[m_b_s].second) { y.push_back(1); }
+					else { y.push_back(0); }
+				}
 				delta.push_back(cost_derivative(activations[activations.size() - 1], y));
 
 				// Υπολογίζω τα errors για τα προηγούμενα layers μέχρι και το προτελευταίο	
@@ -216,13 +206,13 @@ int main()
 			// βαρών και των μεροληψιών
 			for (int i = 0; i < dCdb.size(); i++) {
 				for (int j = 0; j < dCdb[i].size(); j++) {
-					dCdb[i][j] /= 10;
+					dCdb[i][j] /= mini_batch_size;
 				}
 			}
 			for (int i = 0; i < dCdw.size(); i++) {
 				for (int j = 0; j < dCdw[i].size(); j++) {
 					for (int k = 0; k < dCdw[i][j].size(); k++) {
-						dCdw[i][j][k] /= 10;
+						dCdw[i][j][k] /= mini_batch_size;
 					}
 				}
 			}
@@ -244,20 +234,45 @@ int main()
 			}
 			net.setWeights(w);
 			dCdw.clear();
+
+			cout << help << endl;
+			help++;
 		}
-		cout << "Epoch " << i << " complete." << endl;
-		vector<vector<double>> activations, zeds;
-		vector<double> test_subject = { 0.3, 0.1, 0.7, 0.0, 0.0, 0.2 };
-		activations.push_back(test_subject);
-		for (int i = 0; i < net.getNum_Layers() - 1; i++) {
-			vector<double> temp = VecAdd(MatMultVec(net.getWeights()[i], activations[i]), net.getBiases()[i]);
-			zeds.push_back(temp);
-			for (int j = 0; j < temp.size(); j++) {
-				temp[j] = sigmoid(temp[j]);
+		cout << "Epoch " << ep << " complete." << endl;
+
+		// Testing
+
+		int sum = 0;
+		for (int i = 0; i < 10000; i++) {
+			double y = dataset.test_labels[i];
+			vector<double> x;
+			for (int j = 0; j < 784; j++) {
+				x.push_back(double(dataset.test_images[i][j]) / 255);
 			}
-			activations.push_back(temp);
+
+			vector<vector<double>> activations;
+			activations.push_back(x);
+			// Υπολογίζω τις τιμές a (activation) κάθε layer
+			for (int j = 0; j < net.getNum_Layers() - 1; j++) {
+				vector<double> temp = VecAdd(MatMultVec(net.getWeights()[j], activations[j]), net.getBiases()[j]);
+				for (int k = 0; k < temp.size(); k++) {
+					temp[k] = sigmoid(temp[k]);
+				}
+				activations.push_back(temp);
+			}
+			double max = activations[2][0];
+			int index = 0;
+			for (int j = 1; j < 10; j++) {
+				if (activations[2][j] > max) {
+					max = activations[2][j];
+					index = j;
+				}
+			}
+			if (index == y) { sum++; }
 		}
-		cout << "1";
+
+		cout << "End of epochy " << ep << "." << endl << "Results: " << sum << "/10000." << endl;
+
 	}
 
 
