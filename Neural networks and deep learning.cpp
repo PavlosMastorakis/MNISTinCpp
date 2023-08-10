@@ -1,4 +1,3 @@
-// Μπορεί να γίνει βελτίωση στη sigmoid (με void και reference ή με εφαρμογή σε διάνυσμα)
 #include <iostream>
 #include <vector>
 #include <random>
@@ -79,21 +78,21 @@ public:
 
 int main()
 {
-	// ΔΙΑΒΑΖΕΙ ΤΟ DATASET
+	// Διαβάζει το dataset
 	auto dataset = mnist::read_dataset<vector, vector, uint8_t, uint8_t>();
 	// Κάνει tuple το training_images με το training_labels. Το tuple ονομάζεται training_data.
 	vector< pair< vector<unsigned char>, unsigned char > > training_data;
-	int n = 8000; //dataset.training_images.size();
+	int n = dataset.training_images.size();
 	for (int i = 0; i < n; i++) {
 		training_data.push_back( { dataset.training_images[i], dataset.training_labels[i] } );
 	}
 
 	Network net = Network({784, 30, 10});
 
-	// Epoch training: given an epoch, we want the program to run (epoch) times. So, for loop, epoch times.
-	// The epoch is given at the beggining of the program, along with other the other hyper-parameters.
+	// Epoch training: κάνει train, epoch φορές. Στο τέλος κάθε μιας ελέγχεται στο test set.
+	// Hyper parameters: epoch=10, mini batch size=10, eta=3
 	srand(time(0));
-	int epoch = 1, mini_batch_size = 10;
+	int epoch = 10, mini_batch_size = 10;
 	double eta = 3.0;
 	for (int ep = 0; ep < epoch; ep++) {
 		random_shuffle(training_data.begin(), training_data.end());	
@@ -119,7 +118,7 @@ int main()
 				vector<vector<double>> activations, zeds;
 				activations.push_back(mini_b_to_double);
 
-				// Υπολογίζω τις τιμές a (activation) και z για κάθε layer
+				// Υπολογίζω τις τιμές activation και z για κάθε layer
 				for (int i = 0; i < net.getNum_Layers() - 1; i++) {
 					vector<double> temp = VecAdd(MatMultVec(net.getWeights()[i], activations[i]), net.getBiases()[i]);
 					zeds.push_back(temp);
@@ -235,10 +234,10 @@ int main()
 			net.setWeights(w);
 			dCdw.clear();
 
+			// Για να ελέγχουμε το στάδιο στο οποίο βρισκόμαστε
 			cout << help << endl;
 			help++;
 		}
-		cout << "Epoch " << ep << " complete." << endl;
 
 		// Testing
 
@@ -252,7 +251,7 @@ int main()
 
 			vector<vector<double>> activations;
 			activations.push_back(x);
-			// Υπολογίζω τις τιμές a (activation) κάθε layer
+			// Υπολογίζω τις τιμές activation σε κάθε layer
 			for (int j = 0; j < net.getNum_Layers() - 1; j++) {
 				vector<double> temp = VecAdd(MatMultVec(net.getWeights()[j], activations[j]), net.getBiases()[j]);
 				for (int k = 0; k < temp.size(); k++) {
@@ -274,7 +273,6 @@ int main()
 		cout << "End of epochy " << ep << "." << endl << "Results: " << sum << "/10000." << endl;
 
 	}
-
 
 	return 0;
 }
